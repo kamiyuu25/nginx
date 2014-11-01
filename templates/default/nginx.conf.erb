@@ -60,5 +60,107 @@ http {
         }
         <% end %>
     }
-}
 
+    server {
+        # TCPポート番号 80
+        listen 80;
+        # サーバー名 (www 有無両方を受け付ける)
+        server_name freedom.live-on.net;
+        root   /usr/share/nginx/html/wordpress;
+        index index.php;
+        # アクセスログのファイルパス
+        access_log   /var/log/nginx/freedom.access.log;
+        # エラーログのファイルパス
+        error_log    /var/log/nginx/freedom.error.log;
+        
+        # Wordpress カスタム パーマネントリンク対応
+        try_files $uri $uri/ /index.php?q=$uri&$args;
+        #  or
+        # try_files $uri $uri/ /index.php;
+        
+        # PHPファイルの対応
+        location ~ \.php$ {
+            fastcgi_pass   127.0.0.1:9000;
+            fastcgi_index  index.php;
+            fastcgi_param  SCRIPT_FILENAME  $document_root$fastcgi_script_name;
+            include        fastcgi_params;
+        }
+
+
+        location  / {
+
+            # キャッシュ有無フラグの初期化を行います。
+            # -- (0：キャッシュする、1:キャッシュしない)
+            set $do_not_cache 0;
+            # (*1)クッキーにより、ログイン中、コメント書き込み中、記事書き込み中の判断をします。
+            if ($http_cookie ~ ^.*(comment_author_|wordpress_logged_in|wp-postpass_).*$) {
+                set $do_not_cache 1;
+            }
+            # (*1)Wordpressの専用ディレクトリはキャッシュなし。
+            if ($request_uri ~ "^/wp-admin/.*"){
+                set $do_not_cache 1;
+            }
+            if ($request_uri ~ "^/wp-content/.*"){
+                set $do_not_cache 1;
+            }
+            if ($request_uri ~ "^/wp-includes/.*"){
+                set $do_not_cache 1;
+            }
+            # (*1)Wordpressのcronはキャッシュなし。
+            if ($request_uri ~ "^/wp-cron.php.*"){
+                set $do_not_cache 1;
+            }
+            # (*1)Wordpressのloginはキャッシュなし。
+            if ($request_uri ~ "^/wp-login.php.*"){
+                set $do_not_cache 1;
+            }
+            #  FastCGI キャッシュの場合
+            # -- (*2)存在するファイルはキャッシュなし。
+            if ($request_uri ~* "\.(jpg|jpeg|gif|css|png|js|ico|xml|txt)$"){
+                set $do_not_cache 1;
+            }
+            
+            #  モバイル(携帯を含む)で出力を切り替えている場合は
+            # -- (*3)通常のPCからのアクセスとモバイルで異なるページを出力している場合は、モバイル側をキャッシュなし。
+            if ($http_x_wap_profile ~ ^[a-z0-9\"]+) {
+                set $do_not_cache 1;
+            }
+            if ($http_profile ~ ^[a-z0-9\"]+) {
+                set $do_not_cache 1;
+            }
+            if ($http_user_agent ~ ^.*(2.0\ MMP|240x320|400X240|AvantGo|BlackBerry|Blazer|Cellphone|Danger|DoCoMo|Elaine/3.0|EudoraWeb|Googlebot-Mobile|hiptop|IEMobile|KYOCERA/WX310K|LG/U990|MIDP-2.|MMEF20|MOT-V|NetFront|Newt|Nintendo\ Wii|Nitro|Nokia|Opera\ Mini|Palm|PlayStation\ Portable|portalmmm|Proxinet|ProxiNet|SHARP-TQ-GX10|SHG-i900|Small|SonyEricsson|Symbian\ OS|SymbianOS|TS21i-10|UP.Browser|UP.Link|webOS|Windows\ CE|WinWAP|YahooSeeker/M1A1-R2D2|iPhone|iPod|Android|BlackBerry9530|LG-TU915\ Obigo|LGE\ VX|webOS|Nokia5800).*) {
+                set $do_not_cache 1;
+            }
+            if ($http_user_agent ~ ^(w3c\ |w3c-|acs-|alav|alca|amoi|audi|avan|benq|bird|blac|blaz|brew|cell|cldc|cmd-|dang|doco|eric|hipt|htc_|inno|ipaq|ipod|jigs|kddi|keji|leno|lg-c|lg-d|lg-g|lge-|lg/u|maui|maxo|midp|mits|mmef|mobi|mot-|moto|mwbp|nec-|newt|noki|palm|pana|pant|phil|play|port|prox|qwap|sage|sams|sany|sch-|sec-|send|seri|sgh-|shar|sie-|siem|smal|smar|sony|sph-|symb|t-mo|teli|tim-|tosh|tsm-|upg1|upsi|vk-v|voda|wap-|wapa|wapi|wapp|wapr|webc|winw|winw|xda\ |xda-).*) {
+                set $do_not_cache 1;
+            }
+            if ($http_user_agent ~ ^(DoCoMo/|J-PHONE/|J-EMULATOR/|Vodafone/|MOT(EMULATOR)?-|SoftBank/|[VS]emulator/|KDDI-|UP\.Browser/|emobile/|Huawei/|IAC/|Nokia|mixi-mobile-converter/)) {
+                set $do_not_cache 1;
+            }
+            if ($http_user_agent ~ (DDIPOCKET\;|WILLCOM\;|Opera\ Mini|Opera\ Mobi|PalmOS|Windows\ CE\;|PDA\;\ SL-|PlayStation\ Portable\;|SONY/COM|Nitro|Nintendo)) {
+                set $do_not_cache 1;
+            }
+            
+            # (*4)GET要求以外はキャッシュなし。
+            if ($request_method != "GET") {
+                set $do_not_cache 1;
+            }
+
+            #  FastCGI キャッシュ と リザーブプロキシ キャッシュ で、それぞれ以下のような設定を行います。
+            #  -- それぞれで ディレクティブが異なります。
+            
+            #  FastCGI キャッシュの場合
+            #  -- キャッシュするか否か
+            fastcgi_no_cache        $do_not_cache; 
+            #  -- キャッシュを使用するか否か
+            fastcgi_cache_bypass    $do_not_cache;
+
+            #  リザーブプロキシ キャッシュの場合
+            #  -- キャッシュするか否か
+            proxy_no_cache          $do_not_cache;
+            #  -- キャッシュを使用するか否か
+            proxy_cache_bypass      $do_not_cache;
+            
+        }
+    }
+}

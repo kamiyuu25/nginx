@@ -7,7 +7,28 @@
 # All rights reserved - Do Not Redistribute
 #
 #
+#########################################################
+## ユーザ作成
+#########################################################
 
+u = Chef::EncryptedDataBagItem.load('users', 'nginx')
+
+group u["groups"] do
+  action :create
+end
+
+user u['id'] do
+  supports :managa_home => false
+  uid u["uid"]
+  gid u["groups"]
+  shell u['shell']
+  password u['password']
+end
+
+
+#########################################################
+## セットアップ
+#########################################################
 include_recipe "yum-epel"
 
 package "nginx" do
